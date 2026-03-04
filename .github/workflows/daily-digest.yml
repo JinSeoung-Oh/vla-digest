@@ -1,0 +1,31 @@
+name: VLA Daily Digest
+
+on:
+  schedule:
+    # 매일 오전 8시 KST = UTC 23:00 (전날)
+    - cron: "0 0 * * *"
+  workflow_dispatch:  # 수동 실행 버튼 (테스트용)
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install anthropic feedparser
+
+      - name: Run digest
+        env:
+          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+          SENDER_EMAIL:        ${{ secrets.SENDER_EMAIL }}
+          SENDER_APP_PASSWORD: ${{ secrets.SENDER_APP_PASSWORD }}
+          RECIPIENT_EMAIL:     ${{ secrets.RECIPIENT_EMAIL }}
+        run: python digest.py
