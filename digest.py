@@ -22,7 +22,8 @@ SENDER_EMAIL      = os.environ["SENDER_EMAIL"]       # 보내는 Gmail
 SENDER_PASSWORD   = os.environ["SENDER_APP_PASSWORD"] # Gmail 앱 비밀번호
 RECIPIENT_EMAIL   = os.environ["RECIPIENT_EMAIL"]    # 받는 이메일
 
-MAX_ITEMS = 20       # 하루 최대 아이템 수
+MAX_FETCH = 30        # 수집 후 랭킹 전 후보 수
+MAX_ITEMS = 10       # 최종 발송 아이템 수
 DAYS_BACK = 1        # 며칠치 가져올지
 
 # ─────────────────────────────────────────────
@@ -162,11 +163,11 @@ def fetch_items() -> list[dict]:
                 "url":     link,
             })
 
-    # arxiv 우선, 그 다음 블로그 / 최대 MAX_ITEMS
+    # arxiv 우선, 그 다음 블로그 / 랭킹 전 후보 MAX_FETCH개
     items_arxiv = [i for i in items if i["type"] == "arxiv"]
     items_blog  = [i for i in items if i["type"] == "blog"]
-    merged = (items_arxiv + items_blog)[:MAX_ITEMS]
-    print(f"[INFO] 수집된 아이템: arxiv {len(items_arxiv)}개, 블로그 {len(items_blog)}개 → {len(merged)}개 선택")
+    merged = (items_arxiv + items_blog)[:MAX_FETCH]
+    print(f"[INFO] 수집된 아이템: arxiv {len(items_arxiv)}개, 블로그 {len(items_blog)}개 → 랭킹 후보 {len(merged)}개")
     return merged
 
 # ─────────────────────────────────────────────
@@ -340,7 +341,56 @@ def send_email(html: str, item_count: int):
 if __name__ == "__main__":
     print("[START] VLA Digest 시작")
     items   = fetch_items()
+    items   = rank_items(items)
     body    = summarize(items)
     html    = build_html(body, len(items))
     send_email(html, len(items))
     print("[DONE] 완료")
+
+# ─────────────────────────────────────────────
+# Claude 중요도 랭킹 (요약 전 단계)
+# ─────────────────────────────────────────────
+def rank_items(items: list[dict]) -> list[dict]:
+    """Claude가 중요도 점수 매겨서 상위 MAX_ITEMS개만 반환"""
+    if len(items) <= MAX_ITEMS:
+        return items
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    items_text = ""
+    for i, item in enumerate(items, 1):
+        items_text += f"[{i}] {item['title']}\n내용: {item['summary'][:300]}\n---\n"
+
+    prompt = f"""당신은 VLA/Physical AI 모델 연구자입니다.
+아래 {len(items)}개 논문/블로그 중 가장 중요한 {MAX_ITEMS}개의 번호를 골라주세요.
+
+선택 기준 (높은 점수):
+- 새로운 모델 아키텍처나 학습 방법론 제안
+- VLA, Diffusion Policy, Flow Matching, World Model 등 핵심 방법론 혁신
+- DeepMind, NVIDIA, Meta, CMU, Stanford 등 주요 기관 발표
+- 기존 SOTA 대비 명확한 개선
+
+선택 기준 (낮은 점수):
+- 특정 좁은 도메인 응용만 다루는 논문
+- 하드웨어/센서 위주
+- 기존 방법 단순 벤치마크
+
+{items_text}
+
+중요한 순서대로 {MAX_ITEMS}개 번호만 콤마로 출력하세요. 예: 3,7,1,12,5,9,2,8,11,4
+번호 외 다른 텍스트 없이."""
+
+    msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=100,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    try:
+        indices = [int(x.strip()) - 1 for x in msg.content[0].text.split(",")]
+        ranked = [items[i] for i in indices if 0 <= i < len(items)]
+        print(f"[INFO] 랭킹 완료 → 상위 {len(ranked)}개 선택")
+        return ranked[:MAX_ITEMS]
+    except Exception as e:
+        print(f"[WARN] 랭킹 파싱 실패, 순서대로 사용: {e}")
+        return items[:MAX_ITEMS]
