@@ -1,9 +1,9 @@
 name: VLA Daily Digest
 
 on:
-  schedule:
+  #schedule:
     # 매일 오전 8시 KST = UTC 23:00 (전날)
-    - cron: "0 0 * * *"
+    #- cron: "0 0 * * *"
   workflow_dispatch:  # 수동 실행 버튼 (테스트용)
 
 jobs:
