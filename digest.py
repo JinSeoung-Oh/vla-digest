@@ -293,6 +293,7 @@ def summarize_trends(items: list[dict]) -> tuple[str, bool]:
 - 각 트렌드는 해당하는 논문 제목을 본문에 명시할 것
 - {len(items)}개 아이템이 **모두** 최소 하나의 트렌드에 포함되어야 함 (누락 금지)
 - 각 트렌드 3~4문장. 단순 나열이 아니라 왜 이들이 같은 흐름인지 해석할 것
+- 내용은 트랜드와 해당 트랜드에 해당하는 논문의 내용에 충실해야 함
 
 출력 HTML 구조:
 <div class="section" id="trends">
